@@ -1,0 +1,71 @@
+#include <Arduino.h>
+#include <MsTimer2.h>
+#include "DHT.h"
+
+unsigned long tempoSensor = millis();
+
+unsigned char tcount = 0;
+unsigned char Buffer[80];
+unsigned char Buffer_Len = 0;
+
+static uint8_t DHTPIN = 10;
+DHT dht(DHTPIN, DHT11);
+
+#define temperatura 0x20
+unsigned char temp[8] = { 0x5a, 0xa5, 0x05, 0x82, temperatura, 0x00, 0x00, 0x00 };
+
+
+void Timer2Interrupt() {
+  if (tcount > 0)
+    tcount--;
+}
+
+void Send_Sensor() {
+  int t = dht.readTemperature();
+  temp[6] = highByte(t);
+  temp[7] = lowByte(t);
+  Serial.write(temp, 8);
+  Serial.println(t);
+}
+
+void setup() {
+
+  Serial.begin(115200);
+  pinMode(2, OUTPUT);
+
+  MsTimer2::set(5, Timer2Interrupt);
+  MsTimer2::start();
+
+  dht.begin();
+}
+
+
+void loop() {
+
+  if ((millis() - tempoSensor) >= 1000) {
+    Send_Sensor();
+    tempoSensor = millis();
+  }
+
+  if (Serial.available()) {
+    Buffer[Buffer_Len] = Serial.read();
+    Buffer_Len++;
+    tcount = 5;
+  } else {
+    if (tcount == 0) {
+      if (Buffer[0] == 0X5A) {
+        switch (Buffer[4]) {
+
+          case 0x30:
+            if (Buffer[8] == 1) {
+              digitalWrite(2, HIGH);
+            } else {
+              digitalWrite(2, LOW);
+            }
+            break;
+        }
+        Buffer_Len = 0;
+      }
+    }
+  }
+}
